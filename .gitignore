@@ -33,3 +33,6 @@ dist/
 .cursor/
 .gemini/
 .impeccable/
+# Local design notes, not part of the deliverable
+PRODUCT.md
+DESIGN.md
