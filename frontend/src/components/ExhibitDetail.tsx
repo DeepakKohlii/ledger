@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, api } from '@/lib/api'
 import type { Discrepancy, Evidence, Explanation } from '@/lib/types'
 import { money, typeLabel } from '@/lib/format'
@@ -56,27 +56,37 @@ export function ExhibitDetail({ row, onClose }: { row: Discrepancy; onClose: () 
       .catch(() => setEvidenceState('error'))
   }, [tab, evidenceState, row.key])
 
-  async function explain(refresh = false) {
-    setExplanationState('loading')
-    setError(null)
-    try {
-      setExplanation(
-        await api.post<Explanation>(
-          `/reconciliation/discrepancies/${row.key}/explain${refresh ? '?refresh=true' : ''}`,
-        ),
-      )
-      setExplanationState('done')
-    } catch (caught) {
-      setError(
-        caught instanceof ApiError && caught.status === 503
-          ? 'The explanation service is unavailable. Every figure here still stands.'
-          : caught instanceof ApiError
-            ? caught.message
-            : 'Could not write an explanation.',
-      )
-      setExplanationState('error')
-    }
-  }
+  const explain = useCallback(
+    async (refresh = false) => {
+      setExplanationState('loading')
+      setError(null)
+      try {
+        setExplanation(
+          await api.post<Explanation>(
+            `/reconciliation/discrepancies/${row.key}/explain${refresh ? '?refresh=true' : ''}`,
+          ),
+        )
+        setExplanationState('done')
+      } catch (caught) {
+        setError(
+          caught instanceof ApiError && caught.status === 503
+            ? 'The explanation service is unavailable. Every figure here still stands.'
+            : caught instanceof ApiError
+              ? caught.message
+              : 'Could not write an explanation.',
+        )
+        setExplanationState('error')
+      }
+    },
+    [row.key],
+  )
+
+  // Opening the tab is the request. Explanations are cached per finding, so
+  // reopening one costs nothing.
+  useEffect(() => {
+    if (tab !== 'explanation' || explanationState !== 'idle') return
+    void explain()
+  }, [tab, explanationState, explain])
 
   const entries = Object.entries(row.details)
 
@@ -242,23 +252,7 @@ export function ExhibitDetail({ row, onClose }: { row: Discrepancy; onClose: () 
 
         {tab === 'explanation' && (
           <>
-            {explanationState === 'idle' && (
-              <>
-                <p className="text-[0.78rem] leading-snug text-ink-70">
-                  Written from the finding above. It never changes a figure and never decides a
-                  match.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => explain()}
-                  className="mt-3 w-full border border-ink px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.16em] transition-colors hover:bg-ink hover:text-paper-raised"
-                >
-                  Write an explanation
-                </button>
-              </>
-            )}
-
-            {explanationState === 'loading' && (
+            {(explanationState === 'idle' || explanationState === 'loading') && (
               <p className="code flex items-center gap-2 py-3 text-[0.68rem] uppercase tracking-[0.16em] text-ink-70">
                 <span className="inline-block h-2 w-2 animate-pulse bg-stamp" aria-hidden="true" />
                 Writing explanation
