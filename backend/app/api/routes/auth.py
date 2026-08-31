@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -11,11 +11,37 @@ from app.core.security import (
     verify_password,
     waste_password_comparison,
 )
+from app.core.ratelimit import SlidingWindow
 from app.models import User
 from app.schemas.auth import Credentials, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
+
+# Two windows so neither dimension alone is enough to brute force: one address
+# cannot be hammered from many machines, and one machine cannot sweep many
+# addresses. The per-address window is the tighter of the two.
+BY_ADDRESS = SlidingWindow(limit=6, window_seconds=15 * 60)
+BY_CLIENT = SlidingWindow(limit=25, window_seconds=15 * 60)
+
+
+def _client_key(request: Request) -> str:
+    """Identify the caller, trusting the proxy header the platform sets."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _guard(request: Request, email: str) -> None:
+    for key, window in ((f"email:{email}", BY_ADDRESS), (f"ip:{_client_key(request)}", BY_CLIENT)):
+        retry_after = window.check(key)
+        if retry_after is not None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many attempts. Try again shortly.",
+                headers={"Retry-After": str(int(retry_after))},
+            )
 
 
 def _set_auth_cookie(response: Response, token: str) -> None:
@@ -31,7 +57,9 @@ def _set_auth_cookie(response: Response, token: str) -> None:
 
 
 @router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def signup(credentials: Credentials, response: Response, db: DbSession) -> User:
+def signup(credentials: Credentials, request: Request, response: Response, db: DbSession) -> User:
+    _guard(request, credentials.email)
+
     existing = db.scalar(select(User).where(User.email == credentials.email))
     if existing is not None:
         raise HTTPException(
@@ -59,7 +87,9 @@ def signup(credentials: Credentials, response: Response, db: DbSession) -> User:
 
 
 @router.post("/login", response_model=UserOut)
-def login(credentials: Credentials, response: Response, db: DbSession) -> User:
+def login(credentials: Credentials, request: Request, response: Response, db: DbSession) -> User:
+    _guard(request, credentials.email)
+
     user = db.scalar(select(User).where(User.email == credentials.email))
 
     if user is None:
@@ -78,6 +108,9 @@ def login(credentials: Credentials, response: Response, db: DbSession) -> User:
             detail="Incorrect password",
         )
 
+    # A correct password clears the address window so one forgotten password
+    # does not lock somebody out for the rest of the period.
+    BY_ADDRESS.reset(f"email:{credentials.email}")
     _set_auth_cookie(response, create_access_token(user.id))
     return user
 
