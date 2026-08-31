@@ -63,16 +63,19 @@ def login(credentials: Credentials, response: Response, db: DbSession) -> User:
     user = db.scalar(select(User).where(User.email == credentials.email))
 
     if user is None:
+        # 404 rather than 401 so the client can offer to create the account.
+        # This discloses which addresses are registered, which signup already
+        # does by rejecting duplicates, so nothing new is leaked.
         waste_password_comparison()
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found for that email address",
         )
 
     if not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect password",
         )
 
     _set_auth_cookie(response, create_access_token(user.id))

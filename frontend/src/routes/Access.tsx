@@ -25,17 +25,22 @@ export default function Access() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [unregistered, setUnregistered] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reveal, setReveal] = useState(false)
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setUnregistered(false)
     setBusy(true)
     try {
       if (mode === 'in') await signIn(email, password)
       else await signUp(email, password)
     } catch (caught) {
+      // A 404 on sign in means the address has no account, so the recovery is
+      // to create one rather than to retype the password.
+      setUnregistered(caught instanceof ApiError && caught.status === 404)
       setError(caught instanceof ApiError ? caught.message : 'Something went wrong. Try again.')
     } finally {
       setBusy(false)
@@ -184,12 +189,22 @@ export default function Access() {
               </label>
 
               {error && (
-                <p
-                  role="alert"
-                  className="mt-5 border-l-2 border-stamp pl-3 text-[0.8rem] leading-snug text-stamp"
-                >
-                  {error}
-                </p>
+                <div role="alert" className="mt-5 border-l-2 border-stamp pl-3">
+                  <p className="text-[0.8rem] leading-snug text-stamp">{error}</p>
+                  {unregistered && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('up')
+                        setError(null)
+                        setUnregistered(false)
+                      }}
+                      className="mt-1.5 text-[0.8rem] leading-snug text-ink underline decoration-rule-strong underline-offset-4 transition-colors hover:text-stamp hover:decoration-stamp"
+                    >
+                      Create an account for {email}
+                    </button>
+                  )}
+                </div>
               )}
 
               <button
@@ -205,6 +220,7 @@ export default function Access() {
                 onClick={() => {
                   setMode(mode === 'in' ? 'up' : 'in')
                   setError(null)
+                  setUnregistered(false)
                 }}
                 className="code mt-5 text-[0.66rem] tracking-[0.04em] text-ink-70 underline decoration-rule-strong underline-offset-4 transition-colors hover:text-stamp hover:decoration-stamp"
               >
