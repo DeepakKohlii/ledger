@@ -93,8 +93,15 @@ export function Register(props: Props) {
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
         <h2 className="font-display text-[1rem] font-semibold tracking-[-0.005em]">Exhibit register</h2>
-        <p className="code text-[0.62rem] uppercase tracking-[0.16em] text-ink-45">
-          {loading ? 'Reading' : `${sorted.length} of ${total} shown`}
+        <p className="code flex items-center gap-2 text-[0.62rem] uppercase tracking-[0.16em] text-ink-45">
+          <span
+            aria-hidden="true"
+            className={`h-1.5 w-1.5 rounded-full bg-stamp transition-opacity duration-200 ${
+              loading ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={loading ? { animation: 'breathe 1.1s ease-in-out infinite' } : undefined}
+          />
+          {sorted.length} of {total} shown
         </p>
       </div>
 
@@ -195,7 +202,9 @@ export function Register(props: Props) {
         {loading && sorted.length === 0 ? (
           <Skeleton />
         ) : (
-          <tbody>
+          <tbody
+            className={`transition-opacity duration-200 ${loading ? 'opacity-45' : 'opacity-100'}`}
+          >
             {sorted.map((row) => {
               const isSelected = selected === row.key
               return (
