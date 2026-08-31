@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, query } from '@/lib/api'
 import type { Discrepancy, DiscrepancyPage, Overview, Severity, Summary, UploadRecord } from '@/lib/types'
 import { SEVERITY_ORDER, count, money } from '@/lib/format'
@@ -9,7 +9,12 @@ import { Register } from '@/components/Register'
 import { TypeBreakdown } from '@/components/TypeBreakdown'
 import { ExhibitDetail } from '@/components/ExhibitDetail'
 import { Brief } from '@/components/Brief'
-import { LoadingScreen, expectsReconciliation, rememberReconciliation } from '@/components/Loading'
+import {
+  LoadingScreen,
+  reconcileRemainingMs,
+  expectsReconciliation,
+  rememberReconciliation,
+} from '@/components/Loading'
 
 const PAGE = 50
 
@@ -23,6 +28,11 @@ export default function CaseView() {
   const [loading, setLoading] = useState(true)
   const [booted, setBooted] = useState(false)
   const [reconciling, setReconciling] = useState(() => expectsReconciliation())
+  // Signature of the filters the current rows already reflect, so the list
+  // is not refetched with the very parameters the overview just returned.
+  const loadedFilters = useRef<string | null>(null)
+  const reconcilingRef = useRef(reconciling)
+  reconcilingRef.current = reconciling
   const [failed, setFailed] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
@@ -43,15 +53,25 @@ export default function CaseView() {
     if (booted) return
 
     setLoading(true)
-    api
-      .get<Overview>(`/reconciliation/overview${query({ limit: PAGE })}`)
-      .then((data) => {
+
+    // When reconciling, the four steps and the request run together and the
+    // dashboard waits for whichever finishes last.
+    const minimumWait = reconcilingRef.current
+      ? new Promise((resolve) => setTimeout(resolve, reconcileRemainingMs()))
+      : Promise.resolve()
+
+    Promise.all([
+      api.get<Overview>(`/reconciliation/overview${query({ limit: PAGE })}`),
+      minimumWait,
+    ])
+      .then(([data]) => {
         if (cancelled) return
         setSummary(data.summary)
         setUploads(data.uploads)
         setRows(data.discrepancies.items)
         setTotal(data.discrepancies.total)
         setFailed(null)
+        loadedFilters.current = JSON.stringify({ search: '', severities: [], types: [], limit: PAGE })
         rememberReconciliation(data.summary.has_orders && data.summary.has_payments)
       })
       .catch(() => {
@@ -63,6 +83,7 @@ export default function CaseView() {
         setBooted(true)
         setReconciling(false)
       })
+
     return () => {
       cancelled = true
     }
@@ -71,6 +92,15 @@ export default function CaseView() {
   useEffect(() => {
     let cancelled = false
     if (!booted) return
+
+    const signature = JSON.stringify({
+      search: debounced,
+      severities,
+      types,
+      limit,
+    })
+    if (signature === loadedFilters.current) return
+    loadedFilters.current = signature
 
     setLoading(true)
     api

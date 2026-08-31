@@ -8,7 +8,24 @@ const STEPS = [
   'Ranking findings by exposure',
 ]
 
-const STEP_MS = 700
+const STEP_MS = 300
+
+// How long the four steps take to play through. CaseView holds the dashboard
+// back for at least this long when it is reconciling, so the sequence is seen
+// rather than skipped on a fast response.
+export const RECONCILE_SEQUENCE_MS = STEPS.length * STEP_MS
+
+// The reconciliation sequence spans two mounts: the session check renders it,
+// then the dashboard renders it again. Only that variant shares a start time,
+// so the steps continue across the handover instead of replaying. A gap longer
+// than the handover means a genuinely new page load, which starts over.
+let reconcileStart: number | null = null
+let reconcileLastSeen = 0
+
+export function reconcileRemainingMs(): number {
+  if (reconcileStart === null) return RECONCILE_SEQUENCE_MS
+  return Math.max(0, RECONCILE_SEQUENCE_MS - (Date.now() - reconcileStart))
+}
 
 // The loader mounts twice on a cold start: once while the session is checked,
 // again while the dashboard loads. Holding the sequence outside the component
@@ -35,9 +52,6 @@ export function rememberReconciliation(hasBothExports: boolean): void {
   }
 }
 
-let sequenceStart: number | null = null
-let lastSeen = 0
-
 function Tick() {
   return (
     <svg viewBox="0 0 14 14" aria-hidden="true" className="h-3.5 w-3.5">
@@ -58,19 +72,27 @@ export function LoadingScreen({
 }: {
   variant?: 'checking' | 'session' | 'reconciling'
 }) {
-  const [tick, setTick] = useState(() => Date.now())
+  const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
-    const now = Date.now()
-    if (sequenceStart === null || now - lastSeen > 1200) sequenceStart = now
-    const timer = setInterval(() => setTick(Date.now()), 100)
+    const mountedAt = Date.now()
+    let startedAt = mountedAt
+
+    if (variant === 'reconciling') {
+      if (reconcileStart === null || mountedAt - reconcileLastSeen > 800) {
+        reconcileStart = mountedAt
+      }
+      startedAt = reconcileStart
+    }
+
+    setElapsed(Date.now() - startedAt)
+    const timer = setInterval(() => setElapsed(Date.now() - startedAt), 80)
     return () => {
-      lastSeen = Date.now()
+      if (variant === 'reconciling') reconcileLastSeen = Date.now()
       clearInterval(timer)
     }
-  }, [])
+  }, [variant])
 
-  const elapsed = tick - (sequenceStart ?? tick)
   const reached = Math.min(Math.floor(elapsed / STEP_MS), STEPS.length - 1)
   const progress = Math.min((elapsed / (STEP_MS * STEPS.length)) * 100, 100)
 
