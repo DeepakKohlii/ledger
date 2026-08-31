@@ -1,11 +1,107 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
+@theme {
+  --color-ink: #09090b;
+  --color-ink-70: #3f3f46;
+  --color-ink-45: #71717a;
+  --color-paper: #ffffff;
+  --color-paper-raised: #fafafa;
+  --color-paper-sunk: #f4f4f5;
+  --color-rule: #e4e4e7;
+  --color-rule-strong: #d4d4d8;
+  --color-stamp: #dc2626;
+  --color-cleared: #059669;
+  --color-disputed: #b45309;
+
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Zilla Slab", "Archivo", Georgia, serif;
+  --font-code: "Courier Prime", ui-monospace, "Courier New", monospace;
 }
 
-html,
-body,
-#root {
-  height: 100%;
+@layer base {
+  :root {
+    color-scheme: light;
+    --focus: var(--color-stamp);
+  }
+
+  *,
+  *::before,
+  *::after {
+    border-color: var(--color-rule);
+  }
+
+  html {
+    background: var(--color-paper);
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  input,
+  button,
+  select {
+    font: inherit;
+    color: inherit;
+    caret-color: var(--color-stamp);
+  }
+
+  ::selection {
+    background: var(--color-stamp);
+    color: var(--color-paper-raised);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* The scrollbar is part of a dense table's frame, so it is drawn rather than
+     inherited from the browser. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-rule-strong);
+    border: 3px solid var(--color-paper);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-45);
+  }
+}
+
+@layer components {
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.code {
+  font-family: var(--font-code);
+  letter-spacing: 0.02em;
+}
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
