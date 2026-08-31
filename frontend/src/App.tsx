@@ -1,11 +1,29 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider, useAuth } from '@/state/auth'
+import Access from '@/routes/Access'
+import CaseView from '@/routes/CaseView'
+import { LoadingScreen } from '@/components/Loading'
+
+function Gate() {
+  const { user, status } = useAuth()
+
+  if (status === 'checking') {
+    return <LoadingScreen />
+  }
+
+  return (
+    <Routes>
+      <Route path="/access" element={user ? <Navigate to="/" replace /> : <Access />} />
+      <Route path="/" element={user ? <CaseView /> : <Navigate to="/access" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
 export default function App() {
   return (
-    <div className="flex min-h-full items-center justify-center bg-slate-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold text-slate-900">Ledger</h1>
-        <p className="mt-2 text-sm text-slate-600">
-        </p>
-      </div>
-    </div>
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   )
 }
