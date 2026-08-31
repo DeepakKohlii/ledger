@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 24
 
     groq_api_keys: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     cors_origins: str = "http://localhost:5173"
 
