@@ -1,0 +1,4 @@
+# Development-only dependencies. Not installed in the deployed image.
+-r requirements.txt
+pytest==9.1.1
+pandas==3.0.5
