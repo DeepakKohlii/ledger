@@ -53,7 +53,11 @@ function Tick() {
   )
 }
 
-export function LoadingScreen({ variant = 'session' }: { variant?: 'session' | 'reconciling' }) {
+export function LoadingScreen({
+  variant = 'session',
+}: {
+  variant?: 'checking' | 'session' | 'reconciling'
+}) {
   const [tick, setTick] = useState(() => Date.now())
 
   useEffect(() => {
@@ -69,6 +73,30 @@ export function LoadingScreen({ variant = 'session' }: { variant?: 'session' | '
   const elapsed = tick - (sequenceStart ?? tick)
   const reached = Math.min(Math.floor(elapsed / STEP_MS), STEPS.length - 1)
   const progress = Math.min((elapsed / (STEP_MS * STEPS.length)) * 100, 100)
+
+  // Before the session resolves nobody knows whether there is a case file, an
+  // account, or anyone signed in at all, so this states nothing.
+  if (variant === 'checking') {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-paper px-6">
+        <div className="w-full max-w-[34rem]">
+          <div className="flex items-center gap-3">
+            <Mark className="h-6 w-6" />
+            <span className="code text-[0.75rem] font-bold uppercase tracking-[0.34em]">Ledger</span>
+          </div>
+          <div className="mt-6 h-[3px] w-full overflow-hidden rounded-full bg-paper-sunk">
+            <div
+              className="h-[3px] w-1/3 rounded-full bg-ink"
+              style={{ animation: 'sweep 1.4s ease-in-out infinite' }}
+            />
+          </div>
+          <p role="status" className="sr-only">
+            Loading
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   // Opening a session is not reconciling anything. Claiming to read exports
   // before any file exists would be the interface stating something untrue.

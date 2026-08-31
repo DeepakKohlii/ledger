@@ -2,13 +2,13 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/state/auth'
 import Access from '@/routes/Access'
 import CaseView from '@/routes/CaseView'
-import { LoadingScreen, expectsReconciliation } from '@/components/Loading'
+import { LoadingScreen } from '@/components/Loading'
 
 function Gate() {
   const { user, status } = useAuth()
 
   if (status === 'checking') {
-    return <LoadingScreen variant={expectsReconciliation() ? 'reconciling' : 'session'} />
+    return <LoadingScreen variant="checking" />
   }
 
   return (
