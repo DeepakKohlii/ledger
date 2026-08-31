@@ -63,6 +63,11 @@ def test_headline_totals(result):
     assert s.order_value == Decimal("42269.65")
     assert s.settled_charge_value == Decimal("42123.38")
     assert s.value_at_risk == Decimal("2178.43")
+    assert s.disputed_order_count == 16
+    assert s.disputed_value == Decimal("2306.37")
+    # Every order is either reconciled or disputed, never both and never neither.
+    assert s.reconciled_value + s.disputed_value == s.order_value
+    assert s.reconciled_order_count + s.disputed_order_count == s.order_count
 
 
 def test_value_at_risk_is_the_sum_of_its_parts(result):

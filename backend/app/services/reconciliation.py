@@ -85,6 +85,8 @@ class Summary:
     fee_value: Decimal = ZERO
     reconciled_order_count: int = 0
     reconciled_value: Decimal = ZERO
+    disputed_order_count: int = 0
+    disputed_value: Decimal = ZERO
     discrepancy_count: int = 0
     value_at_risk: Decimal = ZERO
     by_type: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -504,6 +506,8 @@ def _summarise(
         for order in unique_orders
         if not any(d.severity in blocking for d in per_order.get(order.order_id, []))
     ]
+    settled_ids = {o.order_id for o in reconciled}
+    disputed = [o for o in unique_orders if o.order_id not in settled_ids]
 
     settled_charges = [p for p in payments if not _is_refund(p) and p.status == "settled"]
     settled_refunds = [p for p in payments if _is_refund(p) and p.status == "settled"]
@@ -518,6 +522,11 @@ def _summarise(
         fee_value=sum((_money(p.fee) for p in settled_charges), ZERO),
         reconciled_order_count=len(reconciled),
         reconciled_value=sum((_money(o.net_amount) for o in reconciled), ZERO),
+        disputed_order_count=len(disputed),
+        # The order value tied up in orders that did not reconcile. Distinct
+        # from value_at_risk, which is the exposure each finding carries: an
+        # order can be disputed for more or less than its own value.
+        disputed_value=sum((_money(o.net_amount) for o in disputed), ZERO),
     )
 
     for discrepancy in discrepancies:

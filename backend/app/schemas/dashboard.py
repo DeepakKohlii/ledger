@@ -22,6 +22,8 @@ class SummaryOut(BaseModel):
     fee_value: Decimal
     reconciled_order_count: int
     reconciled_value: Decimal
+    disputed_order_count: int
+    disputed_value: Decimal
     discrepancy_count: int
     value_at_risk: Decimal
     by_type: dict[str, TypeBucket]

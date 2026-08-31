@@ -289,9 +289,9 @@ export default function CaseView() {
                     ['Refunded', money(summary.refund_value), 'returned to customers'],
                     ['Processor fees', money(summary.fee_value), 'on settled charges'],
                     [
-                      'Exhibits',
-                      count(summary.discrepancy_count),
-                      `${count(summary.order_count - summary.reconciled_order_count)} orders affected`,
+                      'In dispute',
+                      money(summary.disputed_value),
+                      `${count(summary.disputed_order_count)} orders affected`,
                     ],
                   ].map(([term, value, note]) => (
                     <div key={term} className="rounded-md border border-rule bg-paper-raised px-4 py-3.5">

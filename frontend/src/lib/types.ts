@@ -22,6 +22,8 @@ export interface Summary {
   fee_value: string
   reconciled_order_count: number
   reconciled_value: string
+  disputed_order_count: number
+  disputed_value: string
   discrepancy_count: number
   value_at_risk: string
   by_type: Record<string, TypeBucket>
