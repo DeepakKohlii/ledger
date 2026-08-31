@@ -25,6 +25,19 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
 
     @property
+    def sqlalchemy_url(self) -> str:
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        return url
+
+    @property
+    def migration_url(self) -> str:
+        return self.sqlalchemy_url.replace("-pooler.", ".", 1)
+
+    @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
 
