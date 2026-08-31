@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.schemas.ingestion import UploadOut
+
 
 class TypeBucket(BaseModel):
     count: int
@@ -45,3 +47,43 @@ class DiscrepancyPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class OrderRow(BaseModel):
+    source_row: int
+    order_id: str
+    order_date: str | None
+    customer_email: str | None
+    currency: str | None
+    gross_amount: Decimal | None
+    discount: Decimal | None
+    net_amount: Decimal | None
+    status: str | None
+
+
+class PaymentRow(BaseModel):
+    source_row: int
+    transaction_ref: str
+    processed_at: str | None
+    order_reference: str | None
+    raw_order_reference: str | None
+    currency: str | None
+    amount: Decimal | None
+    fee: Decimal | None
+    net_settled: Decimal | None
+    type: str | None
+    status: str | None
+
+
+class Evidence(BaseModel):
+    cache_key: str
+    orders: list[OrderRow]
+    payments: list[PaymentRow]
+
+
+class Overview(BaseModel):
+    """Everything the dashboard needs for its first paint, in one round trip."""
+
+    summary: SummaryOut
+    uploads: list[UploadOut]
+    discrepancies: DiscrepancyPage
