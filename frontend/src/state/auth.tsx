@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ApiError, api } from '@/lib/api'
+import { rememberReconciliation } from '@/components/Loading'
 import type { User } from '@/lib/types'
 
 interface AuthValue {
@@ -43,11 +44,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signUp = useCallback(async (email: string, password: string) => {
+    // A new account has nothing loaded, and the hint is per browser rather
+    // than per account, so it must not carry over from the previous user.
+    rememberReconciliation(false)
     setUser(await api.post<User>('/auth/signup', { email, password }))
   }, [])
 
   const signOut = useCallback(async () => {
     await api.post('/auth/logout')
+    rememberReconciliation(false)
     setUser(null)
   }, [])
 

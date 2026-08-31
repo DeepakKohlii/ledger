@@ -120,6 +120,15 @@
   }
 }
 
+@keyframes sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @keyframes breathe {
   0%,
   100% {
