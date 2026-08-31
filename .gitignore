@@ -23,3 +23,13 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# AI tooling installed locally. Not part of the product, and vendoring a
+# third-party skill would ship code this repo does not own.
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.impeccable/
