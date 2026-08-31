@@ -48,11 +48,46 @@ export const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
 
-  upload: <T>(path: string, file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return request<T>(path, { method: 'POST', body: form })
-  },
+  // fetch cannot report upload progress, so this one call uses XHR.
+  upload: <T>(path: string, file: File, onProgress?: (percent: number) => void) =>
+    new Promise<T>((resolve, reject) => {
+      const form = new FormData()
+      form.append('file', file)
+
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${BASE}${path}`)
+      xhr.withCredentials = true
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100))
+        }
+      }
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText) as T)
+          } catch {
+            reject(new ApiError(xhr.status, 'The server returned an unreadable response.'))
+          }
+          return
+        }
+        let detail = xhr.statusText || `Request failed with status ${xhr.status}`
+        try {
+          const body = JSON.parse(xhr.responseText)
+          if (typeof body?.detail === 'string') detail = body.detail
+        } catch {
+          /* keep the status text */
+        }
+        reject(new ApiError(xhr.status, detail))
+      }
+
+      xhr.onerror = () =>
+        reject(new ApiError(0, 'Could not reach the server. Check your connection and try again.'))
+
+      xhr.send(form)
+    }),
 }
 
 export function query(params: Record<string, string | number | string[] | undefined>): string {

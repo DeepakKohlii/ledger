@@ -5,7 +5,7 @@ import type { UploadRecord, UploadResult } from '@/lib/types'
 interface Props {
   kind: 'orders' | 'payments'
   loaded: UploadRecord | undefined
-  onLoaded: () => void
+  onLoaded: (kind: 'orders' | 'payments') => void
   variant?: 'panel' | 'compact' | 'inline'
 }
 
@@ -43,23 +43,34 @@ const COPY = {
 
 export function Intake({ kind, loaded, onLoaded, variant = 'compact' }: Props) {
   const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'sending' | 'storing'>('idle')
+  const [percent, setPercent] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<UploadResult | null>(null)
+  const busy = phase !== 'idle'
   const copy = COPY[kind]
   const panel = variant === 'panel'
 
   async function send(file: File | undefined) {
     if (!file) return
     setError(null)
-    setBusy(true)
+    setPercent(0)
+    setPhase('sending')
     try {
-      setResult(await api.upload<UploadResult>(`/uploads/${kind}`, file))
-      onLoaded()
+      const uploaded = await api.upload<UploadResult>(`/uploads/${kind}`, file, (value) => {
+        setPercent(value)
+        // The bytes are gone once the transfer completes, but the server is
+        // still parsing and writing rows, so the state changes rather than
+        // sitting at a dishonest 100%.
+        if (value >= 100) setPhase('storing')
+      })
+      setResult(uploaded)
+      onLoaded(kind)
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Upload failed. Try again.')
     } finally {
-      setBusy(false)
+      setPhase('idle')
+      setPercent(0)
       if (input.current) input.current.value = ''
     }
   }
@@ -87,11 +98,37 @@ export function Intake({ kind, loaded, onLoaded, variant = 'compact' }: Props) {
         disabled={busy}
         onClick={() => input.current?.click()}
         className={`w-full border border-ink bg-transparent font-semibold uppercase tracking-[0.16em] transition-colors hover:bg-ink hover:text-paper disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-45 ${
-          panel ? 'px-4 py-4 text-[0.78rem]' : 'px-3 py-2 text-[0.72rem]'
+          panel ? 'px-4 py-3 text-[0.75rem]' : 'px-3 py-2 text-[0.72rem]'
         }`}
       >
-        {busy ? 'Reading' : loaded ? 'Replace file' : 'Choose CSV'}
+        {busy ? 'Working' : loaded ? 'Replace file' : 'Choose CSV'}
       </button>
+
+      {busy && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between">
+            <span className="code text-[0.6rem] uppercase tracking-[0.14em] text-ink-45">
+              {phase === 'sending' ? 'Uploading' : 'Storing rows'}
+            </span>
+            <span className="num code text-[0.62rem] text-ink-70">
+              {phase === 'sending' ? `${percent}%` : ''}
+            </span>
+          </div>
+          <div className="mt-1.5 h-[3px] w-full overflow-hidden rounded-full bg-paper-sunk">
+            {phase === 'sending' ? (
+              <div
+                className="h-[3px] rounded-full bg-ink transition-[width] duration-150 ease-out"
+                style={{ width: `${percent}%` }}
+              />
+            ) : (
+              <div
+                className="h-[3px] w-1/3 rounded-full bg-ink"
+                style={{ animation: 'sweep 1.2s ease-in-out infinite' }}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 
@@ -172,23 +209,23 @@ export function Intake({ kind, loaded, onLoaded, variant = 'compact' }: Props) {
 
   return (
     <div>
-      <div className="border border-rule bg-paper-raised p-6 sm:p-8">
-        <h3 className="font-display text-[1.5rem] font-semibold tracking-[-0.01em]">{copy.title}</h3>
-        <p className="mt-1 text-[0.88rem] text-ink-70">{copy.hint}</p>
-        <div className="mt-6">{status}</div>
-        <div className="mt-3">{picker}</div>
-        <p className="mt-6 border-t border-rule pt-4 text-[0.78rem] leading-relaxed text-ink-45">
+      <div className="border border-rule bg-paper-raised p-5 sm:p-6">
+        <h3 className="font-display text-[1.25rem] font-semibold tracking-[-0.01em]">{copy.title}</h3>
+        <p className="mt-0.5 text-[0.85rem] text-ink-70">{copy.hint}</p>
+        <div className="mt-4">{status}</div>
+        <div className="mt-2.5">{picker}</div>
+        <p className="mt-4 border-t border-rule pt-3 text-[0.76rem] leading-relaxed text-ink-45">
           Headers must match exactly. A file missing a column is refused whole; individual rows
           that fail to parse are listed back to you rather than dropped in silence.
         </p>
         {problems}
       </div>
 
-      <dl className="mt-4">
+      <dl className="mt-3">
         <dt className="code text-[0.62rem] font-bold uppercase tracking-[0.16em] text-ink">
           Required columns
         </dt>
-        <dd className="mt-2 flex flex-wrap gap-x-2 gap-y-1.5">
+        <dd className="mt-1.5 flex flex-wrap gap-x-1.5 gap-y-1.5">
           {copy.columns.map((column) => (
             <span
               key={column}

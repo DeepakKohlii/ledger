@@ -9,7 +9,7 @@ import { Register } from '@/components/Register'
 import { TypeBreakdown } from '@/components/TypeBreakdown'
 import { ExhibitDetail } from '@/components/ExhibitDetail'
 import { Brief } from '@/components/Brief'
-import { LoadingScreen } from '@/components/Loading'
+import { LoadingScreen, expectsReconciliation, rememberReconciliation } from '@/components/Loading'
 
 const PAGE = 50
 
@@ -22,6 +22,7 @@ export default function CaseView() {
   const [limit, setLimit] = useState(PAGE)
   const [loading, setLoading] = useState(true)
   const [booted, setBooted] = useState(false)
+  const [reconciling, setReconciling] = useState(() => expectsReconciliation())
   const [failed, setFailed] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
@@ -51,6 +52,7 @@ export default function CaseView() {
         setRows(data.discrepancies.items)
         setTotal(data.discrepancies.total)
         setFailed(null)
+        rememberReconciliation(data.summary.has_orders && data.summary.has_payments)
       })
       .catch(() => {
         if (!cancelled) setFailed('Could not load the case file. Reload to try again.')
@@ -59,6 +61,7 @@ export default function CaseView() {
         if (cancelled) return
         setLoading(false)
         setBooted(true)
+        setReconciling(false)
       })
     return () => {
       cancelled = true
@@ -91,24 +94,50 @@ export default function CaseView() {
   }, [booted, debounced, severities, types, limit])
 
   // A new upload changes everything, so the whole overview is fetched again.
-  const reload = useCallback(() => {
-    setSelected(null)
-    setLimit(PAGE)
-    setBooted(false)
+  const orders = uploads.find((u) => u.kind === 'orders')
+  const payments = uploads.find((u) => u.kind === 'payments')
+
+  const refreshQuietly = useCallback(async () => {
+    try {
+      const data = await api.get<Overview>(`/reconciliation/overview${query({ limit: PAGE })}`)
+      setSummary(data.summary)
+      setUploads(data.uploads)
+      setRows(data.discrepancies.items)
+      setTotal(data.discrepancies.total)
+      rememberReconciliation(data.summary.has_orders && data.summary.has_payments)
+    } catch {
+      setFailed('Could not refresh the case file. Reload to try again.')
+    }
   }, [])
+
+  const reload = useCallback(
+    (kind: 'orders' | 'payments') => {
+      setSelected(null)
+      setLimit(PAGE)
+      // One export cannot be reconciled against nothing. The reconciliation
+      // screen only makes sense once the other side is already present;
+      // otherwise the page stays put and just updates what is loaded.
+      const otherSideLoaded = kind === 'orders' ? Boolean(payments) : Boolean(orders)
+      if (otherSideLoaded) {
+        setReconciling(true)
+        setBooted(false)
+      } else {
+        void refreshQuietly()
+      }
+    },
+    [orders, payments, refreshQuietly],
+  )
 
   function pick(row: Discrepancy) {
     setSelected(row)
     setVisited((prev) => new Set(prev).add(row.key))
   }
 
-  const orders = uploads.find((u) => u.kind === 'orders')
-  const payments = uploads.find((u) => u.kind === 'payments')
   const ready = Boolean(summary?.has_orders && summary?.has_payments)
 
   const severityCounts = useMemo(() => summary?.by_severity ?? {}, [summary])
 
-  if (!booted && !failed) return <LoadingScreen />
+  if (!booted && !failed) return <LoadingScreen variant={reconciling ? 'reconciling' : 'session'} />
 
   return (
     <div className="min-h-dvh bg-paper">
@@ -155,22 +184,22 @@ export default function CaseView() {
             Case file unavailable
           </p>
         ) : !ready ? (
-          <section className="py-14 lg:py-20">
-            <h1 className="max-w-[20ch] font-display text-[clamp(2.4rem,5.2vw,4.4rem)] font-bold leading-[1.05] tracking-[-0.02em]">
+          <section className="py-9 lg:py-10">
+            <h1 className="max-w-[22ch] font-display text-[clamp(1.9rem,3.4vw,3rem)] font-bold leading-[1.08] tracking-[-0.02em]">
               Load both exports to open the case.
             </h1>
-            <p className="mt-7 max-w-[68ch] text-[1rem] leading-[1.7] text-ink-70">
+            <p className="mt-5 max-w-[74ch] text-[0.95rem] leading-[1.65] text-ink-70">
               Nothing is reconciled until both sides are present. The order export is what the
               store believes it sold; the payment export is what the processor actually moved.
               Loading a file again replaces the previous one.
             </p>
 
-            <div className="mt-12 grid gap-8 lg:grid-cols-2 lg:gap-10">
+            <div className="mt-7 grid gap-6 lg:grid-cols-2 lg:gap-8">
               <Intake kind="orders" loaded={orders} onLoaded={reload} variant="panel" />
               <Intake kind="payments" loaded={payments} onLoaded={reload} variant="panel" />
             </div>
 
-            <dl className="mt-16 grid gap-8 border-t border-rule pt-8 sm:grid-cols-3">
+            <dl className="mt-9 grid gap-8 border-t border-rule pt-5 sm:grid-cols-3">
               {[
                 [
                   'Storage',
@@ -189,7 +218,7 @@ export default function CaseView() {
                   <dt className="code text-[0.62rem] font-bold uppercase tracking-[0.16em] text-ink">
                     {term}
                   </dt>
-                  <dd className="mt-2 max-w-[38ch] text-[0.85rem] leading-relaxed text-ink-70">
+                  <dd className="mt-1.5 max-w-[40ch] text-[0.82rem] leading-relaxed text-ink-70">
                     {detail}
                   </dd>
                 </div>
