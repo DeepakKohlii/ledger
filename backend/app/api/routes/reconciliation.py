@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.deps import CurrentUser, DbSession
 from app.schemas.dashboard import DiscrepancyOut, DiscrepancyPage, SummaryOut
-from app.services import ingestion
+from app.schemas.explanation import ExplanationOut, SummaryExplanationOut
+from app.services import explaining, ingestion
+from app.services.llm import LLMUnavailable
 from app.services.reconciliation import reconcile
 
 router = APIRouter(prefix="/reconciliation", tags=["reconciliation"])
@@ -72,3 +74,90 @@ def discrepancies(
         limit=limit,
         offset=offset,
     )
+
+
+def _summary_payload(result) -> dict:
+    data = dict(result.summary.__dict__)
+    data["by_type"] = {
+        k: {"count": v["count"], "value_at_risk": str(v["value_at_risk"]), "severity": v["severity"]}
+        for k, v in data["by_type"].items()
+    }
+    return data
+
+
+@router.post("/discrepancies/{cache_key}/explain", response_model=ExplanationOut)
+def explain_discrepancy(
+    cache_key: str,
+    current_user: CurrentUser,
+    db: DbSession,
+    refresh: bool = Query(default=False),
+) -> ExplanationOut:
+    _, _, result = _run(db, current_user.id)
+    found = next((d for d in result.discrepancies if d.key == cache_key), None)
+    if found is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown discrepancy")
+
+    payload = {
+        "cache_key": found.key,
+        "type": found.type.value,
+        "severity": found.severity.value,
+        "order_id": found.order_id,
+        "transaction_ref": found.transaction_ref,
+        "amount_at_risk": str(found.amount_at_risk),
+        "currency": found.currency,
+        "summary": found.summary,
+        "details": found.details,
+    }
+
+    try:
+        explanation, cached, model = explaining.explain_discrepancy(
+            db, current_user.id, payload, refresh=refresh
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    return ExplanationOut(
+        cache_key=found.key, cached=cached, model=model, explanation=explanation
+    )
+
+
+@router.post("/summary/explain", response_model=SummaryExplanationOut)
+def explain_summary(
+    current_user: CurrentUser,
+    db: DbSession,
+    refresh: bool = Query(default=False),
+) -> SummaryExplanationOut:
+    orders, payments, result = _run(db, current_user.id)
+    if not orders and not payments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Upload both datasets first"
+        )
+
+    summary = _summary_payload(result)
+    try:
+        explanation, cached, model = explaining.explain_summary(
+            db, current_user.id, summary, refresh=refresh
+        )
+    except LLMUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+
+    return SummaryExplanationOut(
+        cache_key=explaining.summary_cache_key(summary),
+        cached=cached,
+        model=model,
+        explanation=explanation,
+    )
+
+
+@router.get("/llm/status")
+def llm_status(current_user: CurrentUser) -> dict:
+    return {
+        "enabled": explaining.client.enabled,
+        "model": explaining.client.model,
+        "temperature": explaining.client.temperature,
+        "keys": explaining.client.pool.status(),
+    }
